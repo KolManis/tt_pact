@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+package pact.telegram.v1;
+
+option go_package = "github.com/KolManis/tt_pact/pkg/proto/pact/telegram/v1;telegramv1"; 
+
+service TelegramService {
+  // CreateSession создает новую Telegram сессию и возвращает QR код для авторизации
+  rpc CreateSession(CreateSessionRequest) returns (CreateSessionResponse);
+
+  // DeleteSession удаляет существующую сессию и закрывает соединение
+  rpc DeleteSession(DeleteSessionRequest) returns (DeleteSessionResponse);
+
+  // SendMessage отправляет текстовое сообщение через указанную сессию
+  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
+
+  // SubscribeMessages подписывается на поток входящих сообщений для сессии
+  rpc SubscribeMessages(SubscribeMessagesRequest) returns (stream MessageUpdate);
+}
+
+// CreateSessionRequest - пустой запрос для создания сессии
+message CreateSessionRequest {}
+
+// CreateSessionResponse содержит данные для авторизации
+message CreateSessionResponse {
+  // session_id уникальный идентификатор созданной сессии
+  string session_id = 1;
+  // qr_code данные для генерации QR кода (токен авторизации)
+  string qr_code = 2;
+}
+
+// DeleteSessionRequest запрос на удаление сессии
+message DeleteSessionRequest {
+  // session_id идентификатор удаляемой сессии
+  string session_id = 1;
+}
+
+// DeleteSessionResponse пустой ответ на удаление
+message DeleteSessionResponse {}
+
+// SendMessageRequest запрос на отправку сообщения
+message SendMessageRequest {
+  // session_id идентификатор сессии, через которую отправляем
+  string session_id = 1;
+  // peer получатель сообщения (username, телефон или ID)
+  string peer = 2; // e.g. @durov
+  // text текст отправляемого сообщения
+  string text = 3;
+}
+
+// SendMessageResponse содержит ID отправленного сообщения
+message SendMessageResponse {
+  // message_id идентификатор сообщения в Telegram
+  int64 message_id = 1;
+}
+
+// SubscribeMessagesRequest запрос на подписку на сообщения
+message SubscribeMessagesRequest {
+  // message_id идентификатор сообщения в Telegram
+  string session_id = 1;
+}
+
+// MessageUpdate содержит информацию о входящем сообщении
+message MessageUpdate {
+  // message_id идентификатор сообщения в Telegram
+  int64 message_id = 1;
+  // from отправитель сообщения (username или имя)
+  string from = 2;
+  // text текст сообщения
+  string text = 3;
+  // timestamp время отправки
+  int64 timestamp = 4;
+}
