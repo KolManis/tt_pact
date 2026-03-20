@@ -13,5 +13,12 @@ type Session struct {
 	QRCode  string
 	Status  SessionStatus
 	Created int64
-	// TODO
+}
+
+type Message struct {
+	ID        int64
+	From      string
+	Text      string
+	Timestamp int64
+	SessionID string
 }
