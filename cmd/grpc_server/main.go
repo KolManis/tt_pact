@@ -8,6 +8,10 @@ import (
 	"os/signal"
 	"syscall"
 
+	api "github.com/KolManis/tt_pact/internal/api/pact/telegram/v1"
+	"github.com/KolManis/tt_pact/internal/repository/memory"
+	telegramService "github.com/KolManis/tt_pact/internal/service/telegram"
+	telegramV1 "github.com/KolManis/tt_pact/pkg/proto/pact/telegram/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
@@ -17,6 +21,10 @@ const (
 )
 
 func main() {
+	repo := memory.NewSessionRepo()
+	service := telegramService.NewService(repo)
+
+	api := api.NewAPI(service)
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", grpcPort))
 	if err != nil {
 		log.Printf("failed to listen: %v\n", err)
@@ -31,16 +39,9 @@ func main() {
 	// Создаем gRPC сервер
 	s := grpc.NewServer()
 
-	// Регистрируем наш сервис
-	//TODO
-	// sessionManager :=
-	// api :=
+	telegramV1.RegisterTelegramServiceServer(s, api)
 
-	//telegramv1.RegisterTelegramServiceServer(s, api)
-
-	// Включаем рефлексию для отладки
 	reflection.Register(s)
-
 	go func() {
 		log.Printf("gRPC server listening on %d\n", grpcPort)
 		err = s.Serve(lis)

@@ -3,6 +3,7 @@ module github.com/KolManis/tt_pact
 go 1.25.2
 
 require (
+	github.com/google/uuid v1.6.0
 	google.golang.org/grpc v1.79.3
 	google.golang.org/protobuf v1.36.11
 )
