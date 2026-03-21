@@ -16,6 +16,7 @@ func (a *api) SubscribeMessages(req *telegramV1.SubscribeMessagesRequest, stream
 		return status.Errorf(codes.NotFound, "failed to subscribe: %v", err)
 	}
 
+	// Тут наверное надо еще отменить подписки через defer
 	for {
 		select {
 		case <-stream.Context().Done():
