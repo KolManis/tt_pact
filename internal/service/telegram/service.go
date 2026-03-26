@@ -2,6 +2,7 @@ package telegram
 
 import (
 	"context"
+	"log"
 	"sync"
 
 	"github.com/KolManis/tt_pact/internal/model"
@@ -42,16 +43,24 @@ func (s *service) Shutdown(ctx context.Context) {
 	defer s.mu.Unlock()
 
 	for id, cancel := range s.cancels {
+		log.Printf("Stopping session %s", id)
 		cancel()
 		delete(s.cancels, id)
 	}
 
-	for _, subs := range s.subscribers {
+	for sessionID, subs := range s.subscribers {
 		for _, ch := range subs {
-			close(ch)
+			select {
+			case <-ch:
+			default:
+				close(ch)
+			}
 		}
+		delete(s.subscribers, sessionID)
 	}
-	s.subscribers = make(map[string][]chan *model.Message)
+
 	s.clients = make(map[string]*telegram.Client)
 	s.dispatchers = make(map[string]*tg.UpdateDispatcher)
+
+	log.Println("All sessions stopped")
 }

@@ -12,5 +12,4 @@ type TelegramService interface {
 	DeleteSession(ctx context.Context, sessionID string) error
 	SendMessage(ctx context.Context, sessionID, peer, text string) (int64, error)
 	SubscribeMessages(ctx context.Context, sessionID string) (<-chan *model.Message, error)
-	// UnsubscribeMessages ... пока под вопросом
 }
