@@ -2,59 +2,104 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
-	"os"
-	"time"
+	"strings"
+	"syscall"
 
 	"github.com/gotd/td/telegram"
-	"github.com/joho/godotenv"
+	"github.com/gotd/td/telegram/auth"
+	"github.com/gotd/td/telegram/auth/qrlogin"
+	"github.com/gotd/td/tg"
+	qrcode "github.com/skip2/go-qrcode"
+	"golang.org/x/term"
 )
 
 func main() {
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found")
-	}
-
-	appID := mustAtoi(os.Getenv("APP_ID"))
-	appHash := os.Getenv("APP_HASH")
-
+	appID := 29640364
+	appHash := "10a22687a449dc75183ef4d76f7d986a"
 	if appID == 0 || appHash == "" {
 		log.Fatal("set APP_ID and APP_HASH")
 	}
 
-	log.Printf("📱 Testing with APP_ID: %d", appID)
+	ctx := context.Background()
 
-	client := telegram.NewClient(appID, appHash, telegram.Options{})
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	log.Println("Connecting to Telegram...")
+	disp := tg.NewUpdateDispatcher()
+	client := telegram.NewClient(appID, appHash, telegram.Options{
+		UpdateHandler: disp,
+		SessionStorage: &telegram.FileSessionStorage{
+			Path: "./session.json",
+		},
+	})
 
 	if err := client.Run(ctx, func(ctx context.Context) error {
-		log.Println("Connected!")
-
-		api := client.API()
-
-		// Пробуем простой запрос
-		log.Println("📡 Testing API call...")
-		cfg, err := api.HelpGetConfig(ctx)
+		// Если уже есть валидная сессия — ничего делать не нужно.
+		status, err := client.Auth().Status(ctx)
 		if err != nil {
-			return fmt.Errorf("API call failed: %w", err)
+			return err
+		}
+		if status.Authorized {
+			log.Println("Already authorized")
+			return nil
 		}
 
-		log.Printf("API works! DC: %d", cfg.ThisDC)
+		loggedIn := qrlogin.OnLoginToken(disp)
+		_, err = client.QR().Auth(ctx, loggedIn, func(ctx context.Context, token qrlogin.Token) error {
+			// 1) Можно открыть URL напрямую:
+			log.Printf("Open URL in Telegram: %s", token.URL())
+
+			// 2) Или сохранить нормальный PNG QR:
+			if err := qrcode.WriteFile(token.URL(), qrcode.Medium, 512, "login_qr.png"); err != nil {
+				log.Printf("write QR png: %v", err)
+			} else {
+				log.Printf("QR saved to ./login_qr.png (expires: %s)", token.Expires())
+			}
+			return nil
+		})
+
+		// после QR Telegram может потребовать облачный пароль (2FA).
+		if err != nil {
+			if errors.Is(err, auth.ErrPasswordAuthNeeded) || strings.Contains(err.Error(), "SESSION_PASSWORD_NEEDED") {
+				pass, pErr := readPassword("Enter cloud password (2FA): ")
+				if pErr != nil {
+					return pErr
+				}
+				if _, pErr = client.Auth().Password(ctx, pass); pErr != nil {
+					return pErr
+				}
+				log.Println("2FA password accepted")
+				return nil
+			}
+			return err
+		}
+
+		log.Println("QR auth successful")
 		return nil
 	}); err != nil {
-		log.Fatalf("Connection failed: %v", err)
+		log.Fatal(err)
 	}
+}
 
-	log.Println("Test passed!")
+func readPassword(prompt string) (string, error) {
+	fmt.Print(prompt)
+	// Если хотите брать из env:
+	// if p := os.Getenv("PASSWORD"); p != "" { return p, nil }
+
+	b, err := term.ReadPassword(int(syscall.Stdin))
+	fmt.Println()
+	if err != nil {
+		return "", err
+	}
+	s := strings.TrimSpace(string(b))
+	if s == "" {
+		return "", fmt.Errorf("empty password")
+	}
+	return s, nil
 }
 
 func mustAtoi(s string) int {
 	var v int
-	fmt.Sscan(s, &v)
+	_, _ = fmt.Fscan(strings.NewReader(s), &v)
 	return v
 }
