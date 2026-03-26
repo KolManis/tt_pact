@@ -38,7 +38,11 @@ func (s *service) SubscribeMessages(ctx context.Context, sessionID string) (<-ch
 		if len(s.subscribers[sessionID]) == 0 {
 			delete(s.subscribers, sessionID)
 		}
-		close(ch)
+		select {
+		case <-ch:
+		default:
+			close(ch)
+		}
 	}()
 
 	return ch, nil

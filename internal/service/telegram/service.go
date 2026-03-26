@@ -37,26 +37,21 @@ func NewService(sessionRepo repository.SessionRepository, appID int, appHash str
 	}
 }
 
-// Shutdown останавливает все сессии
 func (s *service) Shutdown(ctx context.Context) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Отменяем все контексты
 	for id, cancel := range s.cancels {
 		cancel()
 		delete(s.cancels, id)
 	}
 
-	// Закрываем все каналы подписчиков
 	for _, subs := range s.subscribers {
 		for _, ch := range subs {
 			close(ch)
 		}
 	}
 	s.subscribers = make(map[string][]chan *model.Message)
-
-	// Очищаем клиенты
 	s.clients = make(map[string]*telegram.Client)
 	s.dispatchers = make(map[string]*tg.UpdateDispatcher)
 }

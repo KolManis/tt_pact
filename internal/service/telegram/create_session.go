@@ -16,19 +16,49 @@ import (
 func (s *service) CreateSession(ctx context.Context) (*model.Session, error) {
 	sessionID := uuid.New().String()
 
-	// Проверяем, есть ли уже такая сессия в памяти
 	s.mu.RLock()
 	existingClient, exists := s.clients[sessionID]
 	s.mu.RUnlock()
 
 	if exists && existingClient != nil {
-		// Сессия уже активна
 		log.Printf("Session %s already active", sessionID)
 		session, _ := s.sessionRepo.Get(ctx, sessionID)
 		return session, nil
 	}
 
 	disp := tg.NewUpdateDispatcher()
+
+	disp.OnNewMessage(func(ctx context.Context, e tg.Entities, u *tg.UpdateNewMessage) error {
+		msg, ok := u.Message.(*tg.Message)
+		if !ok {
+			return nil
+		}
+
+		if msg.Out {
+			return nil
+		}
+
+		from := "unknown"
+		if msg.FromID != nil {
+			if peer, ok := msg.FromID.(*tg.PeerUser); ok {
+				from = fmt.Sprintf("%d", peer.UserID)
+			}
+		}
+
+		messageModel := &model.Message{
+			ID:        int64(msg.ID),
+			From:      from,
+			Text:      msg.Message,
+			Timestamp: int64(msg.Date),
+			SessionID: sessionID,
+		}
+
+		log.Printf("📨 New message for session %s from %s: %s", sessionID, from, msg.Message)
+
+		s.broadcastMessage(sessionID, messageModel)
+
+		return nil
+	})
 
 	client := telegram.NewClient(s.appID, s.appHash, telegram.Options{
 		UpdateHandler: &disp,
@@ -51,7 +81,6 @@ func (s *service) CreateSession(ctx context.Context) (*model.Session, error) {
 	s.dispatchers[sessionID] = &disp
 	s.mu.Unlock()
 
-	// Запускаем клиента в фоне
 	go func() {
 		clientCtx, cancel := context.WithCancel(context.Background())
 		s.mu.Lock()
@@ -73,7 +102,6 @@ func (s *service) CreateSession(ctx context.Context) (*model.Session, error) {
 			if status.Authorized {
 				log.Printf("Session %s already authorized", sessionID)
 				s.updateSessionStatus(sessionID, model.SessionStatusReady)
-				// Держим клиента живым
 				<-ctx.Done()
 				return nil
 			}
@@ -91,7 +119,6 @@ func (s *service) CreateSession(ctx context.Context) (*model.Session, error) {
 			log.Printf("Session %s ready", sessionID)
 			s.updateSessionStatus(sessionID, model.SessionStatusReady)
 
-			// Держим клиента живым для обработки сообщений
 			<-ctx.Done()
 			return nil
 		})
@@ -102,13 +129,11 @@ func (s *service) CreateSession(ctx context.Context) (*model.Session, error) {
 		}
 	}()
 
-	// Ждем QR код
 	var qrCode string
 	select {
 	case qrCode = <-qrChan:
 		log.Printf("✅ QR Code for session %s", sessionID)
 	case <-time.After(10 * time.Second):
-		// Если QR не пришел, возможно сессия уже авторизована
 		time.Sleep(2 * time.Second)
 		s.mu.RLock()
 		client := s.clients[sessionID]
@@ -129,7 +154,6 @@ func (s *service) CreateSession(ctx context.Context) (*model.Session, error) {
 	return session, nil
 }
 
-// GetSession - получить существующую сессию по ID
 func (s *service) GetSession(sessionID string) (*model.Session, error) {
 	s.mu.RLock()
 	client, ok := s.clients[sessionID]

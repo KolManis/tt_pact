@@ -19,7 +19,6 @@ func (s *service) SendMessage(ctx context.Context, sessionID, peer, text string)
 		return 0, errors.New("session not found")
 	}
 
-	// Для username
 	if !strings.HasPrefix(peer, "@") {
 		return 0, errors.New("peer must start with @")
 	}
